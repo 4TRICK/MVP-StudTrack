@@ -1,0 +1,871 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>StudTrack — Прототип</title>
+
+  <!-- Tailwind for quick styling -->
+  <script src="https://cdn.tailwindcss.com"></script>
+
+  <!-- React + ReactDOM + Babel (for demo/prototype only) -->
+  <script crossorigin src="https://unpkg.com/react@18/umd/react.development.js"></script>
+  <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+  <script crossorigin src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+  <!-- Chart.js UMD -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+
+  <style>
+    .sidebar-transition { transition: width .18s ease, transform .18s ease; }
+    .card-shadow { box-shadow: 0 8px 26px rgba(15,23,42,0.06); }
+    .tt { position: relative }
+    .tt:hover::after {
+      content: attr(data-tip);
+      position: absolute;
+      left: 50%;
+      transform: translateX(-50%);
+      bottom: calc(100% + 8px);
+      background: #111827;
+      color: white;
+      padding: 6px 8px;
+      font-size: 12px;
+      border-radius: 6px;
+      white-space: nowrap;
+      z-index: 40;
+    }
+  </style>
+</head>
+<body class="bg-gray-50 text-gray-800">
+  <div id="root"></div>
+
+  <script type="text/babel">
+  const { useState, useEffect, useMemo, useRef } = React;
+
+  // Criteria config
+  const CRITERIA_CONFIG = [
+    { key: 'gpa', title: 'Успеваемость', max: 150, description: 'Средний балл (1–5) × 30' },
+    { key: 'courses', title: 'Курсы', max: 200, description: 'Каждый пройденный курс = 20 (макс. 10)' },
+    { key: 'events', title: 'Мероприятия', max: 50, description: 'Каждый семинар/воркшоп = 10 (макс. 5)' },
+    { key: 'projects', title: 'Проекты', max: 50, description: 'Каждый проект = 20 (мин.2)' },
+    { key: 'research', title: 'НИР', max: 50, description: 'Каждая защищённая работа = 20 (мин.2)' },
+    { key: 'hard', title: 'Hard Skills', max: 200, description: 'Каждый тест/навык = 10 (макс.20)' },
+    { key: 'intern', title: 'Практика/Стажировки', max: 100, description: 'Максимум 25 баллов за семестр (назначает куратор)' },
+    { key: 'recom', title: 'Рекомендации', max: 50, description: 'Каждая рекомендация = 25 (макс.2)' },
+  ];
+
+  const DEFAULT_STATE = {
+    gpa: 4.2, courses: 3, events: 2, projects: 1, research: 0, hard: 6, intern: 25, recom: 1,
+    levelThreshold: 850,
+    name: 'Женя Борисов',
+    group: 'БП-401654/452467',
+    avatarBg: '#60a5fa',
+    dob: '2001-01-01',
+    uploaded: { resume: null, certs: ['Сертификат Python.pdf','SQL Workshop.pdf'] },
+    activity: [
+      { month: 'Сентябрь', points: 51 },
+      { month: 'Октябрь', points: 47 },
+      { month: 'Ноябрь', points: 48 }
+    ],
+  };
+
+  // local storage hook
+  function useLocalState(key, initial) {
+    const [state, setState] = useState(() => {
+      try {
+        const raw = localStorage.getItem(key);
+        return raw ? JSON.parse(raw) : initial;
+      } catch { return initial; }
+    });
+    useEffect(() => {
+      try { localStorage.setItem(key, JSON.stringify(state)); } catch {}
+    }, [key, state]);
+    return [state, setState];
+  }
+
+  // compute points using rules
+  function computePoints(values) {
+    const points = {};
+    points.gpa = Math.min(150, Math.round((values.gpa * 30) * 10) / 10);
+    points.courses = Math.min(200, Math.round(values.courses * 20));
+    points.events = Math.min(50, Math.round(values.events * 10));
+    points.projects = Math.min(50, Math.round(values.projects * 20));
+    points.research = Math.min(50, Math.round(values.research * 20));
+    points.hard = Math.min(200, Math.round(values.hard * 10));
+    points.intern = Math.min(100, Math.round(values.intern));
+    points.recom = Math.min(50, Math.round(values.recom * 25));
+    const total = Object.values(points).reduce((s,v)=>s+v,0);
+    return { points, total: Math.round(total*10)/10 };
+  }
+
+  /* ------------------ UI Components ------------------ */
+
+  function Logo({size=32}) {
+    return (
+      <img
+      src="/ноц и политех.png"   // путь к вашему изображению
+      alt="Logo"
+      width={size}
+      height={size}
+      className="object-contain"
+    />
+    );
+  }
+
+  function Header({ onToggle, onOpenProfile, onToggleNotif, profile }) {
+    return (
+      <div className="flex items-center justify-between px-4 h-16 bg-white border-b sticky top-0 z-30">
+        <div className="flex items-center gap-3">
+          <button onClick={onToggle} className="p-2 rounded-md hover:bg-gray-100" aria-label="Toggle sidebar">
+            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" d="M4 6h16M4 12h16M4 18h16" />
+            </svg>
+          </button>
+          {/* header: пользователь просил убрать логотип и название справа от бургера */}
+        </div>
+
+        <div className="flex items-center gap-3">
+          <button onClick={onToggleNotif} className="p-2 rounded-md hover:bg-gray-50 tt" data-tip="Уведомления" aria-label="Notifications">
+            <span className="text-2xl">🔔</span>
+          </button>
+          <button onClick={onOpenProfile} className="flex items-center gap-3 p-1 rounded-md hover:bg-gray-50" aria-label="Open profile">
+            <div className="w-9 h-9 rounded-full flex items-center justify-center text-white font-semibold" style={{background: profile.avatarBg}}>
+              {profile.name.split(' ').map(s=>s[0]).slice(0,2).join('').toUpperCase()}
+            </div>
+            <div className="hidden sm:flex flex-col items-start">
+              <div className="text-sm font-medium leading-4">{profile.name}</div>
+              <div className="text-xs text-gray-400 leading-4">{profile.group}</div>
+            </div>
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  function Sidebar({ collapsed, active, setActive }) {
+    const items = [
+      { key:'home', label: 'Главная' },
+      { key:'achievements', label: 'Достижения' },
+      { key:'courses', label: 'Курсы' },
+      { key:'events', label: 'Мероприятия' },
+      { key:'profile', label: 'Профиль' },
+      { key:'contacts', label: 'Контакты' },
+      { key:'support', label: 'Поддержка' },
+    ];
+
+    return (
+      <aside className={`bg-white border-r sidebar-transition ${collapsed ? 'w-20' : 'w-64'} overflow-hidden flex flex-col`}>
+        <div className="p-4 border-b">
+          <div className="flex items-center gap-3">
+            <div><Logo size={32} /></div>
+            {!collapsed && <div className="flex flex-col">
+              <div className="text-lg font-bold">StudTrack</div>
+              {/* По запросу: убираем строку "Главное" под названием */}
+            </div>}
+          </div>
+        </div>
+
+        <nav className="p-3 flex-1">
+          {items.map(it => (
+            <button key={it.key} onClick={()=>setActive(it.key)} className={`w-full flex items-center gap-3 p-2 rounded-md text-left hover:bg-gray-50 ${active===it.key ? 'bg-indigo-50 text-indigo-600' : 'text-gray-700'}`}>
+              <span className="w-6 text-center">{it.key==='home'?'🏠':it.key==='achievements'?'🏆':it.key==='courses'?'🎓':it.key==='events'?'🗓️':it.key==='profile'?'👤':it.key==='contacts'?'📇':'💬'}</span>
+              {!collapsed && <span className="font-medium">{it.label}</span>}
+            </button>
+          ))}
+        </nav>
+
+        <div className="p-3 border-t text-xs text-gray-500">StudTrack v0.1</div>
+      </aside>
+    );
+  }
+
+  /* ---------- Pages ---------- */
+
+  function WeeklyCalendar({ events = [] }) {
+    const days = ['Пн','Вт','Ср','Чт','Пт','Сб','Вс'];
+    return (
+      <div>
+        <h3 className="text-lg font-semibold mb-3">Календарь ближайшей недели</h3>
+        <div className="grid grid-cols-7 gap-2 text-sm">
+          {days.map(d => (
+            <div key={d} className="p-3 border rounded h-24 flex flex-col justify-between">
+              <div className="font-medium">{d}</div>
+              <div className="text-xs text-gray-400">—</div>
+            </div>
+          ))}
+        </div>
+        <p className="text-gray-400 text-center mt-3">Новых ближайших событий нет</p>
+      </div>
+    );
+  }
+
+  function Home({ totalPoints, profile, openAchievements }) {
+  const LEVELS = [
+    { name: 'Жёлтый студент', min: 0, max: 99, emoji: '🟡', tip: 'Начните с регистрации и заполнения профиля.' },
+    { name: 'Ознакомившийся', min: 100, max: 199, emoji: '🟠', tip: 'Пройдите первые курсы и добавьте проект.' },
+    { name: 'Новичок', min: 200, max: 349, emoji: '🟢', tip: 'Добавьте проект или завершите курс, чтобы перейти на уровень “Активный участник”.' },
+    { name: 'Активный участник', min: 350, max: 499, emoji: '🔵', tip: 'Участвуйте в мероприятиях и стажировках.' },
+    { name: 'Практикант', min: 500, max: 699, emoji: '🟣', tip: 'Завершите проекты и курсы для следующего уровня.' },
+    { name: 'Развивающийся специалист', min: 700, max: 849, emoji: '🔷', tip: 'Развивайтесь в нескольких направлениях.' },
+    { name: 'Потенциальный сотрудник', min: 850, max: Infinity, emoji: '⭐', tip: 'Вы почти на вершине! Поддерживайте активность.' },
+  ];
+
+  const currentLevel = LEVELS.find(l => totalPoints >= l.min && totalPoints <= l.max);
+  const percent = Math.min(100, Math.round((totalPoints / 1000) * 100));
+
+  const [modalLevel, setModalLevel] = React.useState(null);
+  const [showHistory, setShowHistory] = React.useState(false);
+
+  const lastMonth = profile.activity[profile.activity.length - 1];
+
+  return (
+    <div className="p-6 space-y-6">
+
+      {/* --------- Блок 1: Уровень и мотивация --------- */}
+      <section className="bg-white card-shadow rounded-lg p-8 text-center">
+        <div className="text-sm text-gray-500 mb-2">Общая сумма баллов</div>
+        <div className="text-6xl font-extrabold">{totalPoints}</div>
+        <div className="mt-3 text-gray-800 text-xl font-semibold">{`Ты ${currentLevel.name}!`}</div>
+        <div className="mt-2 text-gray-500">{`Участвуй в проектах, проходи курсы и проявляй активность — каждый шаг приближает тебя к статусу компетентного специалиста.`}</div>
+      </section>
+
+      {/* --------- Блок 2: Горизонтальный прогресс-бар с цифрами --------- */}
+      <section className="bg-white card-shadow rounded-lg p-6">
+        <div className="mb-4"><strong>Шкала профессионального роста</strong></div>
+
+        {/* Цифры над шкалой */}
+        <div className="relative w-full h-4 mb-2">
+          <div className="absolute top-0 left-0 w-full flex justify-between text-xs text-gray-500">
+            {Array.from({length: 21}, (_, i) => i * 50).map((val) => (
+              <span key={val} className="transform -translate-x-1/2">
+                {val}
+              </span>
+            ))}
+          </div>
+        </div>
+
+        {/* Прогресс-бар */}
+        <div className="w-full h-3 bg-gray-200 rounded-full overflow-hidden mb-4">
+          <div
+            className="h-3 rounded-full"
+            style={{ width: `${percent}%`, background: 'linear-gradient(90deg,#7c3aed,#06b6d4)' }}
+          ></div>
+        </div>
+
+        {/* Кружки с уровнями */}
+        <div className="flex justify-between text-xs">
+          {LEVELS.map((lvl, i) => {
+            const isActive = totalPoints >= lvl.min;
+            return (
+              <div
+                key={i}
+                className="flex flex-col items-center cursor-pointer"
+                onClick={() => setModalLevel(lvl)}
+                title={`${lvl.tip} (${lvl.min}-${lvl.max} баллов)`}
+              >
+                <div
+                  className={`w-8 h-8 flex items-center justify-center rounded-full text-white font-bold ${
+                    isActive ? 'bg-indigo-600' : 'bg-gray-300'
+                  }`}
+                >
+                  {lvl.emoji}
+                </div>
+                <div className="mt-1 text-center">{lvl.name}</div>
+              </div>
+            );
+          })}
+        </div>
+      </section>
+
+      {/* --------- Блок 3: Прогресс за месяц и история --------- */}
+      <section className="bg-white card-shadow rounded-lg p-6">
+        <div className="text-lg font-semibold mb-2">Ваш прогресс за {lastMonth.month}:</div>
+        <div className="text-gray-600 mb-1">{`+${lastMonth.points} баллов активности`}</div>
+        <div className="text-gray-600 mb-4">{`Всего накоплено: ${profile.activity.reduce((s,a)=>s+a.points,0)} баллов`}</div>
+        <button onClick={() => setShowHistory(s => !s)} className="text-indigo-600 font-semibold underline mb-2">
+          {showHistory ? 'Скрыть историю активности' : 'Показать историю активности'}
+        </button>
+
+        {showHistory && (
+          <div className="mt-3 p-3 bg-gray-50 rounded space-y-1 text-sm text-gray-700">
+            <div className="font-medium">История активности по месяцам:</div>
+            {profile.activity.map(a => (
+              <div key={a.month}>🗓️ {a.month}: {a.points} {a.month === lastMonth.month ? '(в процессе)' : 'баллов'}</div>
+            ))}
+          </div>
+        )}
+      </section>
+
+      {/* --------- Блок 4: Ближайшие события/календарь --------- */}
+      <section className="bg-white card-shadow rounded-lg p-6">
+        <div className="text-lg font-semibold mb-3">Ближайшие события</div>
+        <WeeklyCalendar events={[]} />
+      </section>
+
+      {/* --------- Модальное окно для уровней --------- */}
+      {modalLevel && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg p-6 max-w-md w-full text-center">
+            <div className="text-lg font-semibold mb-2">{modalLevel.name}</div>
+            <div className="text-gray-600 mb-4">{modalLevel.tip}</div>
+            <div className="flex justify-center gap-4">
+              <button onClick={() => { openAchievements(); setModalLevel(null); }} className="px-4 py-2 bg-indigo-600 text-white rounded">Перейти в Достижения</button>
+              <button onClick={() => setModalLevel(null)} className="px-4 py-2 border rounded">Закрыть</button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+
+
+  function CoursesPage() {
+    const [mode, setMode] = useState('mine'); // 'mine' | 'all'
+    const [filterType, setFilterType] = useState('all');
+    const [filterStatus, setFilterStatus] = useState('all');
+    const [query, setQuery] = useState('');
+    const coursesMine = [
+      { id:1, title:'Основы аналитики', status:'Завершён', points:20, type:'Обязательный' },
+      { id:2, title:'Python продвинутый', status:'В процессе', points:20, type:'Рекоменд.' },
+      { id:3, title:'Java', status:'Не завершён', points:0, type:'Необязательный' },
+    ];
+    const coursesAll = [
+      ...coursesMine,
+      { id:4, title:'Введение в ML', status:'Не начат', points:0, type:'Рекоменд.' },
+      { id:5, title:'Дизайн интерфейсов', status:'Не начат', points:0, type:'Необязательный' },
+    ];
+    const list = mode==='mine' ? coursesMine : coursesAll;
+    const filtered = list.filter(c=> (filterType==='all' || c.type===filterType) && (filterStatus==='all' || c.status===filterStatus) && c.title.toLowerCase().includes(query.toLowerCase()));
+
+    return (
+      <div className="p-6">
+        <div className="bg-white card-shadow rounded-lg p-4 space-y-4">
+          <div className="flex items-center gap-4">
+            <div className="flex items-center gap-2">
+              <button onClick={()=>setMode('mine')} className={`px-3 py-2 rounded ${mode==='mine' ? 'bg-blue-600 text-white' : 'bg-blue-50 text-blue-700'}`}>Мои курсы</button>
+              <button onClick={()=>setMode('all')} className={`px-3 py-2 rounded ${mode==='all' ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-700'}`}>Все курсы</button>
+            </div>
+            <div className="ml-auto flex gap-2">
+              <select value={filterType} onChange={(e)=>setFilterType(e.target.value)} className="p-2 border rounded text-sm">
+                <option value="all">Все категории</option>
+                <option value="Обязательный">Обязательные</option>
+                <option value="Рекоменд.">Рекомендованные</option>
+                <option value="Необязательный">Необязательные</option>
+              </select>
+              <select value={filterStatus} onChange={(e)=>setFilterStatus(e.target.value)} className="p-2 border rounded text-sm">
+                <option value="all">Все статусы</option>
+                <option>Завершён</option>
+                <option>В процессе</option>
+                <option>Не завершён</option>
+                <option>Не начат</option>
+              </select>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-3">
+            <input value={query} onChange={(e)=>setQuery(e.target.value)} placeholder="Поиск курсов..." className="flex-1 p-2 border rounded" />
+          </div>
+
+          <div className="overflow-auto">
+            <table className="w-full text-left text-sm">
+              <thead className="text-xs text-gray-500 border-b"><tr><th className="py-2">Курс</th><th className="py-2">Статус</th><th className="py-2">Баллы</th></tr></thead>
+              <tbody>
+                {filtered.map(c => (
+                  <tr key={c.id} className="border-b">
+                    <td className="py-3">{c.title}</td>
+                    <td className="py-3">{c.status}</td>
+                    <td className="py-3 font-semibold">{c.points}</td>
+                  </tr>
+                ))}
+                {filtered.length===0 && <tr><td colSpan="3" className="py-4 text-center text-gray-400">Ничего не найдено</td></tr>}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  function EventsPage() {
+  const [mode, setMode] = useState('mine');
+  const [filterType, setFilterType] = useState('all');   // Тип: Семинар, Воркшоп, Хакатон
+  const [filterStatus, setFilterStatus] = useState('all'); // Статус: Записан, Не записан
+  const [filterMandatory, setFilterMandatory] = useState('all'); // Новый фильтр
+  const [query, setQuery] = useState('');
+
+  const all = [
+    { id:1, title:'Семинар по аналитике', date:'2025-11-03', points:10, status:'Записан', type: 'Семинар', mandatory:'Обязательное' },
+    { id:2, title:'Воркшоп по SQL', date:'2025-11-10', points:10, status:'Не записан', type: 'Воркшоп', mandatory:'Рекоменд.' },
+    { id:3, title:'Хакатон Data', date:'2025-12-01', points:20, status:'Записан', type: 'Хакатон', mandatory:'Необязательное' },
+  ];
+  const mine = all.filter(a => a.status==='Записан');
+
+  const list = mode==='mine' ? mine : all;
+  const filtered = list.filter(e => 
+    e.title.toLowerCase().includes(query.toLowerCase()) &&
+    (filterStatus==='all' || e.status===filterStatus) &&
+    (filterType==='all' || e.type===filterType) &&
+    (filterMandatory==='all' || e.mandatory===filterMandatory)
+  );
+
+  return (
+    <div className="p-6">
+      <div className="bg-white card-shadow rounded-lg p-4 space-y-4">
+        <div className="flex items-center gap-4">
+          <div className="flex items-center gap-2">
+            <button onClick={()=>setMode('mine')} className={`px-3 py-2 rounded ${mode==='mine' ? 'bg-blue-600 text-white' : 'bg-blue-50 text-blue-700'}`}>Мои мероприятия</button>
+            <button onClick={()=>setMode('all')} className={`px-3 py-2 rounded ${mode==='all' ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-700'}`}>Все мероприятия</button>
+          </div>
+          <div className="ml-auto flex gap-2">
+            <select value={filterType} onChange={(e)=>setFilterType(e.target.value)} className="p-2 border rounded text-sm">
+              <option value="all">Все типы</option>
+              <option value="Семинар">Семинары</option>
+              <option value="Воркшоп">Воркшопы</option>
+              <option value="Хакатон">Хакатоны</option>
+            </select>
+            <select value={filterStatus} onChange={(e)=>setFilterStatus(e.target.value)} className="p-2 border rounded text-sm">
+              <option value="all">Все статусы</option>
+              <option value="Записан">Записан</option>
+              <option value="Не записан">Не записан</option>
+            </select>
+            {/* Новый фильтр */}
+            <select value={filterMandatory} onChange={(e)=>setFilterMandatory(e.target.value)} className="p-2 border rounded text-sm">
+              <option value="all">Все категории</option>
+              <option value="Обязательное">Обязательные</option>
+              <option value="Необязательное">Необязательные</option>
+              <option value="Рекоменд.">Рекомендованные</option>
+            </select>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-3">
+          <input value={query} onChange={(e)=>setQuery(e.target.value)} placeholder="Поиск мероприятий..." className="flex-1 p-2 border rounded" />
+        </div>
+
+        <div className="overflow-auto">
+          <table className="w-full text-left text-sm">
+            <thead className="text-xs text-gray-500 border-b">
+              <tr>
+                <th className="py-2">Мероприятие</th>
+                <th className="py-2">Дата</th>
+                <th className="py-2">Баллы</th>
+                <th className="py-2">Статус</th>
+                <th className="py-2">Категория</th>
+              </tr>
+            </thead>
+            <tbody>
+              {filtered.map(ev => (
+                <tr key={ev.id} className="border-b">
+                  <td className="py-3">{ev.title} <div className="text-xs text-gray-400">{ev.type}</div></td>
+                  <td className="py-3">{ev.date}</td>
+                  <td className="py-3">{ev.points}</td>
+                  <td className="py-3">{ev.status}</td>
+                  <td className="py-3">{ev.mandatory}</td>
+                </tr>
+              ))}
+              {filtered.length===0 && <tr><td colSpan="5" className="py-4 text-center text-gray-400">Ничего не найдено</td></tr>}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+
+  function ProfilePage({ profile, setProfile }) {
+  const onCertFiles = (e) => {
+    const files = e.target.files;
+    if (!files?.length) return;
+
+    const arr = Array.from(files).map(f => f.name);
+
+    setProfile(prev => ({
+      ...prev,
+      uploaded: {
+        ...(prev.uploaded ?? {}),
+        certs: [ ...(prev.uploaded?.certs ?? []), ...arr ]
+      }
+    }));
+  };
+
+  const onResume = (e) => {
+    const files = e.target.files;
+    if (!files?.length) return;
+
+    setProfile(prev => ({
+      ...prev,
+      uploaded: {
+        ...(prev.uploaded ?? {}),
+        resume: files[0].name
+      }
+    }));
+  };
+
+  // Функция безопасного отображения даты
+  const formatDob = () => {
+    profile.dob = "2001-01-01";
+    const dob = profile.dob;
+    if (!dob) return "—";
+
+    try {
+      const d = new Date(dob);
+      if (!isNaN(d)) {
+        const dd = String(d.getDate()).padStart(2, "0");
+        const mm = String(d.getMonth() + 1).padStart(2, "0");
+        const yyyy = d.getFullYear();
+        return `${dd}.${mm}.${yyyy}`;
+      }
+    } catch {}
+
+    if (typeof dob === "string" && dob.includes(".")) return dob;
+
+    return dob;
+  };
+
+  return (
+    <div className="p-6">
+      <div className="bg-white card-shadow rounded-lg p-6 max-w-3xl">
+        <div className="flex items-center gap-4">
+          <div
+            className="w-20 h-20 rounded-full flex items-center justify-center text-white font-bold"
+            style={{ background: profile.avatarBg }}
+          >
+            {profile.name.split(" ").map(s => s[0]).slice(0, 2).join("").toUpperCase()}
+          </div>
+
+          <div>
+            <div className="text-lg font-semibold">{profile.name}</div>
+            <div className="text-sm text-gray-500">{profile.group}</div>
+            <div className="text-sm text-gray-500">
+              Дата рождения: {formatDob()}
+            </div>
+          </div>
+        </div>
+
+        <div className="mt-6 space-y-4">
+          <div>
+            <div className="font-medium">Загрузить резюме</div>
+            <input type="file" accept=".pdf,.doc,.docx" onChange={onResume} className="mt-2" />
+            <div className="mt-2 text-sm">
+              {profile.uploaded?.resume
+                ? <>Загружено резюме: <strong>{profile.uploaded.resume}</strong> ✅</>
+                : <span className="text-gray-400">Резюме не загружено</span>
+              }
+            </div>
+          </div>
+
+          <div>
+            <div className="font-medium">Загрузить сертификаты</div>
+            <input type="file" multiple onChange={onCertFiles} className="mt-2" />
+
+            <div className="mt-3">
+              <div className="font-medium">Список сертификатов</div>
+              <ul className="list-disc ml-6 mt-2">
+               {Array.isArray(profile.uploaded?.certs) && profile.uploaded.certs.length > 0
+        ? profile.uploaded.certs.map((c, i) => (
+            <li key={i} className="text-sm">
+              {c} <span className="text-green-600">✅</span>
+            </li>
+          ))
+        : <li className="text-sm text-gray-400">Сертификатов нет</li>
+      }
+              </ul>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  );
+}
+
+  function ContactsPage() {
+    const contacts = [
+      {role: 'Ректор', name: 'Ректор Иванов', email: 'rector@university.ru'},
+      {role: 'Куратор практики', name: 'Петрова Мария', email: 'curator.practice@university.ru'},
+      {role: 'Отдел поддержки', name: 'Support Team', email: 'support@university.ru'},
+      {role: 'Координатор курсов', name: 'Сидоров Алексей', email: 'courses@university.ru'},
+    ];
+    return (
+      <div className="p-6">
+        <div className="bg-white card-shadow rounded-lg p-6">
+          <h3 className="font-semibold mb-4">Контакты</h3>
+          <ul className="space-y-2">
+            {contacts.map((c,i)=>(
+
+              <li key={i} className="text-sm"><strong>{c.role}:</strong> {c.name} — <a className="text-indigo-600" href={`mailto:${c.email}`}>{c.email}</a></li>
+            ))}
+          </ul>
+        </div>
+      </div>
+    );
+  }
+
+  function SupportModal({ open, onClose }) {
+    const [text, setText] = useState('');
+    if(!open) return null;
+    return (
+      <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
+        <div className="bg-white rounded p-6 w-full max-w-lg">
+          <div className="flex items-center justify-between">
+            <div className="font-semibold">Поддержка</div>
+            <button onClick={onClose} className="text-gray-500">✕</button>
+          </div>
+          <textarea value={text} onChange={(e)=>setText(e.target.value)} maxLength={1000} rows={6} className="w-full border p-3 rounded mt-4" placeholder="Опишите проблему (до 1000 символов)"></textarea>
+          <div className="mt-4 flex justify-center">
+            <button onClick={()=>{ alert('Сообщение отправлено (эмуляция)'); setText(''); onClose(); }} className="px-4 py-2 bg-blue-600 text-white rounded">Отправить</button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  function AchievementsPage({ points, onOpenCriterion }) {
+  const canvasRef = useRef(null);
+
+  useEffect(() => {
+    const labels = CRITERIA_CONFIG.map(c => c.title);
+    const data = CRITERIA_CONFIG.map(c => Math.min(points[c.key] || 0, c.max));
+    const maxData = CRITERIA_CONFIG.map(c => c.max); // Максимальные значения
+
+    const ctx = canvasRef.current.getContext('2d');
+    let chart;
+    try {
+      chart = new Chart(ctx, {
+        type: 'radar',
+        data: {
+          labels,
+          datasets: [
+            {
+              label: 'Максимум',
+              data: maxData,
+              backgroundColor: 'rgba(255,0,0,0.1)',
+              borderColor: 'red',
+              pointBackgroundColor: 'red',
+              borderWidth: 2,
+              pointRadius: 4, // Радиус точки
+              
+            },
+            {
+              label: 'Текущие баллы',
+              data,
+              backgroundColor: 'rgba(124,58,237,0.15)',
+              borderColor: '#7c3aed',
+              pointBackgroundColor: '#7c3aed',
+              borderWidth: 2,
+              pointRadius: 4, // Радиус точки
+
+
+            }
+          ]
+        },
+        options: {
+          scales: {
+            r: {
+              beginAtZero: true,
+              suggestedMax: Math.max(...maxData),
+              ticks: { stepSize: 50 }
+            }
+          },
+          plugins: {
+            legend: { display: true, position: 'bottom' }
+          }
+        }
+      });
+    } catch(e) { console.error(e); }
+    return () => { if(chart) chart.destroy(); };
+  }, [points]);
+
+  const total = Object.values(points).reduce((s,v)=>s+(v||0),0);
+
+  return (
+    <div className="p-6">
+      <div className="bg-white card-shadow rounded-lg p-6">
+        <div className="flex gap-6 items-center">
+          <div className="w-1/2">
+            <canvas ref={canvasRef} width={420} height={420}></canvas>
+          </div>
+          <div className="flex-1">
+            <div className="text-sm text-gray-500">Общее количество баллов</div>
+            <div className="text-5xl font-bold">{total}</div>
+            <div className="mt-4 text-sm text-gray-600">
+              Диаграмма показывает распределение по критериям. Красный — максимальные значения, синий — ваши текущие баллы.
+            </div>
+          </div>
+        </div>
+
+        <div className="mt-6 grid grid-cols-1 sm:grid-cols-2 gap-3">
+          {CRITERIA_CONFIG.map(c => (
+            <button key={c.key} onClick={()=>onOpenCriterion(c)} className="p-3 border rounded text-left hover:bg-gray-50 flex justify-between items-center">
+              <div>
+                <div className="font-medium">{c.title}</div>
+                <div className="text-xs text-gray-400">{c.description}</div>
+              </div>
+              <div className="text-sm font-semibold">{points[c.key] || 0} / {c.max}</div>
+            </button>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+
+  function CriterionDetail({ criterion, points, onBack }) {
+    return (
+      <div className="p-6">
+        <div className="bg-white card-shadow rounded-lg p-6 max-w-4xl mx-auto">
+          <div className="flex items-center justify-between">
+            <div>
+              <div className="text-lg font-semibold">{criterion.title}</div>
+              <div className="text-sm text-gray-500">{points} / {criterion.max} баллов</div>
+            </div>
+            <div>
+              <button onClick={onBack} className="px-3 py-1 border rounded">Назад</button>
+            </div>
+          </div>
+
+          <div className="mt-6 text-sm text-gray-700">
+            {criterion.key === 'gpa' && (
+              <div>
+                <div className="font-medium">Академическая успеваемость — таблица семестров</div>
+                <table className="w-full text-sm mt-3">
+                  <thead className="text-xs text-gray-400"><tr><th>Семестр</th><th>Средний балл</th><th>Баллы (i)</th><th>Сессия</th></tr></thead>
+                  <tbody>
+                    <tr><td>1</td><td>4.2</td><td>126</td><td>Закрыта</td></tr>
+                    <tr><td>1 (Допса)</td><td>-</td><td>0</td><td>Допса</td></tr>
+                  </tbody>
+                </table>
+                <div className="mt-3 text-xs text-gray-500">Баллы начисляются только если сессия закрыта. Если сессия «Допса» — баллы не учитываются.</div>
+              </div>
+            )}
+
+            {criterion.key === 'hard' && (
+              <div>
+                <div className="font-medium">Hard skills — тесты и навыки</div>
+                <table className="w-full text-sm mt-3">
+                  <thead className="text-xs text-gray-400"><tr><th>Навык / Тест</th><th>Тип</th><th>Баллы</th><th>Статус</th></tr></thead>
+                  <tbody>
+                    <tr><td>Python тест</td><td>Тест</td><td>10</td><td>✅</td></tr>
+                    <tr><td>SQL тест</td><td>Тест</td><td>10</td><td>✅</td></tr>
+                    <tr><td>Excel продвинутый</td><td>Навык</td><td>10</td><td>❌</td></tr>
+                  </tbody>
+                </table>
+                <div className="mt-2 text-xs text-gray-500">Максимум 20 тестов × 10 баллов = 200</div>
+              </div>
+            )}
+
+            {criterion.key === 'projects' && (
+              <div>
+                <div className="font-medium">Проектная деятельность</div>
+                <table className="w-full text-sm mt-3">
+                  <thead className="text-xs text-gray-400"><tr><th>Проект</th><th>Дата сдачи</th><th>Баллы</th><th>Статус</th></tr></thead>
+                  <tbody>
+                    <tr><td>Проект по Python</td><td>20.11</td><td>20</td><td>Принят</td></tr>
+                    <tr><td>Проект по Data Science</td><td>25.11</td><td>20</td><td>На проверке</td></tr>
+                  </tbody>
+                </table>
+                <div className="mt-2 text-xs text-gray-500">Минимум 2 проекта для получения полного балла (50)</div>
+              </div>
+            )}
+
+            {['courses','events','research','intern','recom'].includes(criterion.key) && (
+              <div>
+                <div className="font-medium">Детали по критерию</div>
+                <div className="mt-3 text-sm text-gray-600">{criterion.description}</div>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  /* ------------------ App ------------------ */
+
+  function App() {
+    const [collapsed, setCollapsed] = useLocalState('st_collapsed', false); // сайдбар свернут/развернут
+    const [active, setActive] = useLocalState('st_active', 'home');        // текущая активная страница
+    const [values, setValues] = useLocalState('st_values', DEFAULT_STATE);  // все значения критериев
+    const [profile, setProfile] = useState({
+    name: DEFAULT_STATE.name,
+    group: DEFAULT_STATE.group,
+    avatarBg: DEFAULT_STATE.avatarBg,
+    dob: DEFAULT_STATE.dob,
+    uploaded: { resume: null, certs: [] },
+    activity: DEFAULT_STATE.activity
+    });
+
+    const { points, total } = computePoints(values);
+
+    const [notifOpen, setNotifOpen] = useState(false);
+    const [supportOpen, setSupportOpen] = useState(false);
+
+    // achievements detail state
+    const [selectedCriterion, setSelectedCriterion] = useState(null);
+
+    useEffect(() => {
+      // store profile.activity into values for Home usage (local only)
+      setValues(prev => ({ ...prev, activity: profile.activity || DEFAULT_STATE.activity }));
+    }, []); // only initial
+
+    function openAchievements() {
+      setActive('achievements');
+      setSelectedCriterion(null);
+    }
+
+    return (
+      <div className="min-h-screen flex">
+        <Sidebar collapsed={collapsed} active={active} setActive={(k)=>{ setActive(k); setSelectedCriterion(null); if(k==='support') setSupportOpen(true); }} />
+        <div className="flex-1 flex flex-col">
+          <Header onToggle={()=>setCollapsed(s=>!s)} onOpenProfile={()=>setActive('profile')} onToggleNotif={()=>setNotifOpen(s=>!s)} profile={profile} />
+
+          <main className="flex-1 overflow-auto bg-gray-50">
+            {/* route switch */}
+            {active === 'home' && <Home totalPoints={total} profile={profile} openAchievements={openAchievements} />}
+
+            {active === 'courses' && <CoursesPage />}
+
+            {active === 'events' && <EventsPage />}
+
+            {active === 'profile' && <ProfilePage profile={profile} setProfile={setProfile} />}
+
+            {active === 'contacts' && <ContactsPage />}
+
+            {active === 'support' && (
+              <div className="p-6 flex items-center justify-center">
+                <div className="bg-white card-shadow p-8 rounded-lg text-center max-w-lg w-full">
+                  <div className="text-lg font-semibold mb-4">Нужна помощь?</div>
+                  <div className="mb-6 text-sm text-gray-500">Если у вас возникли вопросы — напишите в поддержку.</div>
+                  <button onClick={()=>setSupportOpen(true)} className="px-6 py-3 bg-blue-600 text-white rounded-lg text-sm font-semibold shadow">Написать поддержку</button>
+                </div>
+              </div>
+            )}
+
+            {active === 'achievements' && !selectedCriterion && <AchievementsPage points={points} onOpenCriterion={(c)=>setSelectedCriterion(c)} />}
+
+            {active === 'achievements' && selectedCriterion && <CriterionDetail criterion={selectedCriterion} points={points[selectedCriterion.key] || 0} onBack={()=>setSelectedCriterion(null)} />}
+          </main>
+
+          <footer className="text-xs text-gray-400 p-3 text-center">StudTrack — прототип. Данные сохраняются локально в браузере.</footer>
+        </div>
+
+        <SupportModal open={supportOpen} onClose={()=>setSupportOpen(false)} />
+
+        {notifOpen && (
+          <div className="fixed right-6 top-20 bg-white border rounded shadow p-4 z-40">
+            <div className="font-semibold">Уведомления</div>
+            <div className="text-sm text-gray-600 mt-2">Нет новых уведомлений</div>
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+  </script>
+</body>
+</html>

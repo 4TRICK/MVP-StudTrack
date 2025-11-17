@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="ru">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Траектория — Система отслеживания прогресса студентов</title>
+    
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <style>
+      .sidebar-transition { transition: width .18s ease, transform .18s ease; }
+      .card-shadow { box-shadow: 0 8px 26px rgba(15,23,42,0.06); }
+      .tt { position: relative }
+      .tt:hover::after {
+        content: attr(data-tip);
+        position: absolute;
+        left: 50%;
+        transform: translateX(-50%);
+        bottom: calc(100% + 8px);
+        background: #111827;
+        color: white;
+        padding: 6px 8px;
+        font-size: 12px;
+        border-radius: 6px;
+        white-space: nowrap;
+        z-index: 40;
+      }
+      .role-selector { 
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      }
+    </style>
+  </head>
+  <body class="bg-gray-50 text-gray-800">
+    <div id="root"></div>
+  </body>
+</html>

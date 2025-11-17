@@ -88,7 +88,7 @@
 Клонируйте репозиторий
 
 ```bash
-git clone <адрес-репозитория>
+git clone https://github.com/4TRICK/MVP-StudTrack.git
 cd trajectory-mvp
 ```
 ## 2. Запустите Docker (если еще не запущен)

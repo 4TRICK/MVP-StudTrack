@@ -1,5 +1,4 @@
 [![Typing SVG](https://readme-typing-svg.herokuapp.com?color=0033CC&size=28&lines=Траектория+—+Система+отслеживания+прогресса+студентов)](https://git.io/typing-svg)
-[![Typing SVG](https://readme-typing-svg.herokuapp.com?color=%2336BCF7&lines=Telegram+survey+bot)](https://git.io/typing-svg) 
 
 
 ### 🙏 Благодарность

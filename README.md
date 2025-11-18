@@ -1,4 +1,4 @@
-<div style="display: flex; align-items: center;">
+<div style="display: flex; align-items: up;">
   <img src="MVP-S/logo.jpg" alt="logo" width="28" style="margin-right: 12px;">
   <a href="https://git.io/typing-svg">
     <img 

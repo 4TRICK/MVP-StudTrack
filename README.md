@@ -1,3 +1,6 @@
+<p align="left">
+  <img src="assets/logo.png" alt="logo" width="80">
+</p>
 [![Typing SVG](https://readme-typing-svg.herokuapp.com?color=0033CC&pause=500&size=28&width=900&lines=Траектория+—+Система+отслеживания+прогресса+студентов)](https://git.io/typing-svg)
 
 

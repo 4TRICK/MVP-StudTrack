@@ -1,5 +1,14 @@
+<div style="display: flex; align-items: center;">
+  <img src="MVP-S/logo.jpg" alt="logo" width="40" style="margin-right: 10px;">
+  <a href="https://git.io/typing-svg">
+    <img src="https://readme-typing-svg.herokuapp.com?color=0033CC&pause=500&size=28&width=900&lines=Траектория+—+Система+отслеживания+прогресса+студентов" alt="Typing SVG">
+  </a>
+</div>
+
+
+
 <p align="left">
-  <img src="MVP-S/logo.jpg" alt="logo" width="80">
+  <img src="MVP-S/logo.jpg" alt="logo" width="40">
 </p>
 
 [![Typing SVG](https://readme-typing-svg.herokuapp.com?color=0033CC&pause=500&size=28&width=900&lines=Траектория+—+Система+отслеживания+прогресса+студентов)](https://git.io/typing-svg)

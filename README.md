@@ -2,7 +2,7 @@
   <img src="MVP-S/logo.jpg" alt="logo" width="28">
 
   <img 
-    src="https://readme-typing-svg.herokuapp.com?color=0033CC&pause=500&size=26&width=600&lines=Траектория+—+Система+отслеживания+прогресса+студентов"
+    src="[![Typing SVG](https://readme-typing-svg.herokuapp.com?color=0033CC&pause=500&size=28&width=900&lines=Траектория+—+Система+отслеживания+прогресса+студентов)](https://git.io/typing-svg)
     alt="Typing SVG"
   >
 </div>

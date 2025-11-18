@@ -96,7 +96,10 @@ cd trajectory-mvp
 ## 2. Запустите Docker (если еще не запущен)
 
 - На Windows/Mac: запустите Docker Desktop
-- На Linux: sudo systemctl start docker
+- На Linux:
+```bash
+sudo systemctl start docker
+```
 
 ## 3. Запустите проект одной командой
 ```bash
